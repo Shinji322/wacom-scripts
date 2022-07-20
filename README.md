@@ -26,7 +26,7 @@ $ sudo pacman -S bc gawk xf86-input-wacom fzf
 # Running
 Just download, chmod, and execute!
 ```bash
-$ curl https://raw.githubusercontent.com/Shinji322/wacom-scripts/main/wacom -o $HOME/.local/bin
+$ curl https://raw.githubusercontent.com/Shinji322/wacom-scripts/main/wacom -o $HOME/.local/bin/wacom
 $ chmod u+x $HOME/.local/bin/wacom
 $ wacom # tadah!
 ```
