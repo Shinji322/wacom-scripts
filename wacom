@@ -9,8 +9,8 @@ echo -n "
       Display this help message
     -m, --monitor [biggest|smallest|primary]:
       Selects specific monitor
-    -d, --dmenu:
-      Use dmenu instead of fzf
+    -f, --fzf:
+      Use fzf instead of dmenu
 "
 }
 
@@ -49,11 +49,7 @@ query_monitors() {
     # if there's only one monitor, there would be two variables in data
     reply="${data[1]}" # in this case, there's only one
   else
-    if [ $DMENU ]; then
-      reply="$(printf '%s -- %s\n' "${data[@]}" | dmenu -i -l 3 -p 'Monitor?')"
-    else
-      reply="$(printf '%s -- %s\n' "${data[@]}" | fzf --prompt='Monitor?> ')"
-    fi
+    reply="$(printf '%s -- %s\n' "${data[@]}" | eval "$MENU")"}
     [ -z "$reply" ] && {
       echo "Please select an appropriate monitor and try again."; exit 1
     }
@@ -89,7 +85,7 @@ fixaspectratio() {
 # | |\/| |/ _` | | '_ \
 # | |  | | (_| | | | | |
 # \_|  |_/\__,_|_|_| |_|
-wacomfzf() {
+wacommenu() {
   getdeviceid
   query_monitors
   fixpenlocation "${DEVICE_ID}" "$resolution"
@@ -144,8 +140,10 @@ wacom_specific_monitor() {
   esac
 }
 
-[ -z "$1" ] && { wacomfzf; exit; }
-opts=$(getopt -o hmd -l help,monitor,dmenu -n "$0" -- "$@") || usage
+
+MENU="dmenu -i -l 3 -p 'Monitor?'"
+[ -z "$1" ] && { wacommenu; exit; }
+opts=$(getopt -o hmf -l help,monitor,fzf -n "$0" -- "$@") || usage
 eval set -- "$opts"
 while [[ -n "$1" ]]; do
   case $1 in
@@ -156,12 +154,12 @@ while [[ -n "$1" ]]; do
       [ -z "$2" ] && usage; exit 1
       wacom_specific_monitor "$2"; exit
       ;;
-    -d|--dmenu)
-      DMENU=true
-      wacomfzf; exit
+    -f|--fzf)
+      MENU="fzf --prompt='Monitor?> '"
+      wacommenu; exit
       ;;
     *)
-      wacomfzf; exit
+      wacommenu; exit
       ;;
   esac
 done
