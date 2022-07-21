@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+# Dependencies: fzf gawk xorg-xrandr xf86-input-wacom
+
+usage() {
+echo -n "
+  This is a (relatively) simple script that will automatically configure your connected wacom devices. It will map the chosen monitor to your wacom device.
+
+    -h, --help:
+      Display this help message
+    -m, --monitor [biggest|smallest|primary]:
+      Selects specific monitor
+    -d, --dmenu:
+      Use dmenu instead of fzf
+"
+}
+
+
+# ______                _   _                 
+# |  ___|              | | (_)                
+# | |_ _   _ _ __   ___| |_ _  ___  _ __  ___ 
+# |  _| | | | '_ \ / __| __| |/ _ \| '_ \/ __|
+# | | | |_| | | | | (__| |_| | (_) | | | \__ \
+# \_|  \__,_|_| |_|\___|\__|_|\___/|_| |_|___/
+getdeviceid() {
+  # you can hardcode it here if you want
+  DEVICE_ID="$(xsetwacom list devices | awk -F: '/stylus/ {print $2}' | awk '{print $1}')"
+  [ -z "$DEVICE_ID" ] && {
+    echo "Could not find any connected devices. Please edit the script or try again."
+    exit 1
+  }
+}
+query_monitors() {
+  # Gathering data to query user
+  IFS=$'\n'
+  data=()
+  for monitor in $(xrandr -q | grep ' connected'); do
+    data+=("${monitor%% *}") # analogous to cut -d ' ' -f1
+    res="$(grep -o -E '[0-9]+x[0-9]+\+[0-9]+\+[0-9]+' <<< "$monitor")" # monitor resolution + offset
+    case $monitor in
+      *primary*)
+        data+=("primary $res")
+        ;;
+      *)
+        data+=("$res")
+        ;;
+    esac
+  done
+
+  if [ "${#data[@]}" -le 2 ]; then
+    # if there's only one monitor, there would be two variables in data
+    reply="${data[1]}" # in this case, there's only one
+  else
+    if [ $DMENU ]; then
+      reply="$(printf '%s -- %s\n' "${data[@]}" | dmenu -i -l 3 -p 'Monitor?')"
+    else
+      reply="$(printf '%s -- %s\n' "${data[@]}" | fzf --prompt='Monitor?> ')"
+    fi
+    [ -z "$reply" ] && {
+      echo "Please select an appropriate monitor and try again."; exit 1
+    }
+  fi
+
+  # regrabs the resolution + offset
+  resolution=`grep -o -E '[0-9]+x[0-9]+\+[0-9]+\+[0-9]+' <<< "$reply"`
+
+  # for some reason, the grep doesn't work. Leaving it here in case someone is smart enough to debug
+  #grep -o -E '[0-9]+x[0-9]+' <<< "$resolution" | cut -d 'x' -f1,2 --output-delimiter=$'\n' | read -r width height
+  width="$(grep -o -E '[0-9]+x' <<< "$resolution" | cut -d 'x' -f1)"
+  height="$(grep -o -E 'x[0-9]+' <<< "$resolution" | cut -d 'x' -f2)"
+}
+fixpenlocation() {
+  # last part is monitor resolution + offset
+  xsetwacom set "${1:-$DEVICE_ID}" MapToOutput "$2"
+}
+# slightly reduce drawing area to match aspect ratio of monitor
+fixaspectratio() {
+  TAB_WIDTH="$(xsetwacom get "${1:-$DEVICE_ID}" Area | cut -d ' ' -f3)"
+  #TAB_HEIGHT="$(xsetwacom get "${1:-$DEVICE_ID}" Area | cut -d ' ' -f4)"
+  NEW_HEIGHT=`bc -l <<< "$TAB_WIDTH * ($2/$3)"`
+
+  # String subtitution truncates bc -l's decimal precision
+  xsetwacom set "${1:-$DEVICE_ID}" Area 0 0 "$TAB_WIDTH" "${NEW_HEIGHT%.*}"
+}
+
+
+
+# ___  ___      _
+# |  \/  |     (_)
+# | .  . | __ _ _ _ __
+# | |\/| |/ _` | | '_ \
+# | |  | | (_| | | | | |
+# \_|  |_/\__,_|_|_| |_|
+wacomfzf() {
+  getdeviceid
+  query_monitors
+  fixpenlocation "${DEVICE_ID}" "$resolution"
+  fixaspectratio "${DEVICE_ID}" "$height" "$width"
+}
+wacom_specific_monitor() {
+  monitors=$(xrandr -q | grep ' connected')
+  case $1 in
+    b|biggest)
+      # uses biggest single monitor (based on physical size)
+      max_size=0
+      for monitor in "${monitors[@]}"; do
+        grep -o '[0-9]*' <<< "$monitor" | tail -2 | read -r width height
+        size=`bc -l <<< "$width * $height"`
+
+        (( size > max_size )) && max_size=$size
+      done
+
+      # main funcs
+      getdeviceid
+      fixpenlocation "$DEVICE_ID" "$reply"
+      fixaspectratio "$DEVICE_ID" "$height" "$width"
+      ;;
+    s|smallest)
+      # uses smallest single monitor (based on physical size)
+      min_size=20000 # if you have a monitor this size, then screw you
+      for monitor in "${monitors[@]}"; do
+        grep -o '[0-9]*' <<< "$monitor" | tail -2 | read -r width height
+        size="$(bc -l <<< "$width * $height")"
+
+        (( size < min_size )) && min_size=$size
+      done
+
+      # main funcs
+      getdeviceid
+      fixpenlocation "$DEVICE_ID" "$reply"
+      fixaspectratio "$DEVICE_ID" "$height" "$width"
+      ;;
+    p|primary)
+      # uses primary monitor
+      monitor="$(xrandr -q | grep ' primary')"
+      grep -o '[0-9]*' <<< "$monitor" | tail -2 | read -r width height
+
+      # main funcs
+      getdeviceid
+      fixpenlocation "$DEVICE_ID" "$reply"
+      fixaspectratio "$DEVICE_ID" "$height" "$width"
+      ;;
+    *)
+      usage
+      ;;
+  esac
+}
+
+[ -z "$1" ] && wacomfzf; exit
+opts=$(getopt -o hm -l help,monitor -n "$0" -- "$@") || exit
+eval set -- "$opts"
+while [[ -n "$1" ]]; do
+  case $1 in
+    -h|--help)
+      usage; exit
+      ;;
+    -m|--monitor)
+      [ -z "$2" ] && usage; exit 1
+      wacom_specific_monitor "$2"; exit
+      ;;
+    -d|--dmenu)
+      ;;
+    *)
+      wacomfzf; exit
+      ;;
+  esac
+done
