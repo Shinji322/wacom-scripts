@@ -146,7 +146,7 @@ wacom_specific_monitor() {
 }
 
 [ -z "$1" ] && wacomfzf; exit
-opts=$(getopt -o hm -l help,monitor -n "$0" -- "$@") || exit
+opts=$(getopt -o hm -l help,monitor -n "$0" -- "$@") || usage
 eval set -- "$opts"
 while [[ -n "$1" ]]; do
   case $1 in
@@ -158,6 +158,8 @@ while [[ -n "$1" ]]; do
       wacom_specific_monitor "$2"; exit
       ;;
     -d|--dmenu)
+      DMENU=true
+      wacomfzf; exit
       ;;
     *)
       wacomfzf; exit
