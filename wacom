@@ -14,7 +14,6 @@ echo -n "
 "
 }
 
-
 # ______                _   _                 
 # |  ___|              | | (_)                
 # | |_ _   _ _ __   ___| |_ _  ___  _ __  ___ 
@@ -145,8 +144,8 @@ wacom_specific_monitor() {
   esac
 }
 
-[ -z "$1" ] && wacomfzf; exit
-opts=$(getopt -o hm -l help,monitor -n "$0" -- "$@") || usage
+[ -z "$1" ] && { wacomfzf; exit; }
+opts=$(getopt -o hmd -l help,monitor,dmenu -n "$0" -- "$@") || usage
 eval set -- "$opts"
 while [[ -n "$1" ]]; do
   case $1 in
